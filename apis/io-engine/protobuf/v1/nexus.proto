@@ -136,6 +136,15 @@ enum NvmeAnaState {
   NVME_ANA_CHANGE_STATE = 0xF;          // not yet supported
 }
 
+// QoS settings for a nexus device
+message NexusQos {
+  // Current SPDK QoS settings (what's actually applied to the bdev)
+  optional uint32 rw_ios_per_sec = 1;     // IOPS limit (read/write operations per second)
+  optional uint32 rw_mbytes_per_sec = 2;  // Read/Write bandwidth limit in MB/s
+  optional uint32 r_mbytes_per_sec = 3;   // Read-only bandwidth limit in MB/s
+  optional uint32 w_mbytes_per_sec = 4;   // Write-only bandwidth limit in MB/s
+}
+
 // represents a nexus device
 message Nexus {
   string name = 1;             // name of the nexus
@@ -149,6 +158,7 @@ message Nexus {
   uint32 rebuilds = 7;         // total number of rebuild tasks
   NvmeAnaState ana_state = 8;  // Nexus ANA state.
   repeated string allowed_hosts = 9; // host (nqn's) which are allowed to connect to the target
+  optional NexusQos qos = 10;  // Current QoS settings from SPDK
 }
 
 message CreateNexusResponse {
