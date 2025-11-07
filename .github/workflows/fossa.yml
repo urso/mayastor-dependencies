@@ -1,9 +1,11 @@
 name: Fossa CLI
 on:
-  push:
-    branches:
-      - 'develop'
-      - 'release/**'
+  workflow_dispatch:
+# Original triggers (disabled):
+#  push:
+#    branches:
+#      - 'develop'
+#      - 'release/**'
 
 jobs:
   fossa-scan:
