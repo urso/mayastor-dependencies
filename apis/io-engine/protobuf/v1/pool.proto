@@ -58,7 +58,7 @@ message CreatePoolRequest {
   }
   // The pool configuration specifying raid type and configuration if number of
   // disks exceeds 1.
-  optional XataRaidConfig xata_raid_config = 10009;
+  optional XataRaidConfig xata_raid_config = 10009; // Xata ranges from 10000
 }
 
 // Pool metadata arguments.
@@ -93,7 +93,7 @@ message ImportPoolRequest {
   }
   // The pool configuration specifying raid type and configuration if number of
   // disks exceeds 1.
-  optional XataRaidConfig xata_raid_config = 10007;
+  optional XataRaidConfig xata_raid_config = 10007; // Xata range from 10000
 }
 
 // Pool raid configuration
@@ -152,8 +152,9 @@ message Pool {
   optional bool encrypted = 13;
   // Maximum capacity upto which this pool can be expanded, in bytes.
   optional uint64 max_expandable_size = 14;
+
   // Optional RAID information if the pool is configured to use a RAID setup.
-  optional XataRaidInfo xata_raid_info = 10015;
+  optional XataRaidInfo xata_raid_info = 10015; // Xata range from 10000
 }
 
 // Pool metadata info.
