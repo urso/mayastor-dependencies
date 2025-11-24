@@ -1,0 +1,41 @@
+name: Tag Release from Upstream
+
+on:
+  push:
+    branches:
+      - 'release/*'
+
+permissions:
+  contents: write
+
+jobs:
+  tag-release:
+    name: Sync Release Tags
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync release tags
+        id: sync-tags
+        run: |
+          set +e
+          ./scripts/xata/sync-release-tags.sh
+          EXIT_CODE=$?
+          set -e
+          echo "exit_code=${EXIT_CODE}" >> $GITHUB_OUTPUT
+
+          if [ ${EXIT_CODE} -ne 0 ] && [ ${EXIT_CODE} -ne 2 ]; then
+            exit ${EXIT_CODE}
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          case "${{ steps.sync-tags.outputs.exit_code }}" in
+            0) echo "✅ Release tags created and pushed successfully" ;;
+            2) echo "✓ Nothing to do - no new upstream tags to sync" ;;
+            *) echo "❌ Failed with exit code: ${{ steps.sync-tags.outputs.exit_code }}" ;;
+          esac
