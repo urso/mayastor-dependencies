@@ -62,8 +62,8 @@ EXAMPLES:
   # Check a specific commit
   $0 --commit abc123
 
-  # Test with a local test branch and personal fork
-  $0 --branch test-release/2.10 --xata-remote origin --org urso --dry-run
+  # Test with a non-release branch and personal fork
+  $0 --branch my-test-branch --xata-remote origin --org urso --dry-run
 
   # Specify upstream remote
   $0 --upstream-remote openebs-upstream
@@ -174,12 +174,6 @@ find_upstream_tagged_commit() {
   return 1
 }
 
-# Check if a tag exists
-tag_exists() {
-  local tag="$1"
-  git rev-parse "refs/tags/$tag" &>/dev/null
-}
-
 # Main execution
 main() {
   parse_args "$@"
@@ -203,7 +197,7 @@ main() {
 
   # Resolve branch/commit to SHA
   local resolved commit_name commit_sha
-  resolved=$(resolve_branch_or_commit "BRANCH" "COMMIT")
+  resolved=$(resolve_branch_or_commit "$BRANCH" "$COMMIT")
   read -r commit_name commit_sha <<< "$resolved"
   log "Resolved to commit: $commit_sha"
 
@@ -217,7 +211,7 @@ main() {
 
   # Fetch upstream tags first (needed for tag detection)
   log "Fetching upstream tags from $DETECTED_UPSTREAM_REMOTE..."
-  git fetch "$DETECTED_UPSTREAM_REMOTE" 'refs/tags/*:refs/tags/*' 2>/dev/null || warn "Failed to fetch some tags"
+  git fetch "$DETECTED_UPSTREAM_REMOTE" 'refs/tags/*:refs/tags/*' || die "Failed to fetch upstream tags" 1
 
   # Find the upstream commit with tags (handles both direct push and PR merge)
   local upstream_parent

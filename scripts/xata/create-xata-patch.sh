@@ -70,8 +70,8 @@ EXAMPLES:
   # Tag a specific commit on a branch without checking out
   $0 --branch release/2.10 --commit abc123def
 
-  # Test with a local test branch and personal fork
-  $0 --branch test-release/2.10 --xata-remote origin --org urso
+  # Test with a non-release branch and personal fork
+  $0 --branch my-test-branch --xata-remote origin --org urso --force
 
   # Override base version
   $0 --base v2.9.4
@@ -156,11 +156,11 @@ parse_args() {
 check_release_branch() {
   local branch_name="$1"
 
-  if ! echo "$branch_name" | grep -qE '^(release/|test-release/)'; then
+  if ! echo "$branch_name" | grep -qE '^release/'; then
     if [ "$FORCE" = true ]; then
-      warn "Not on a release/* or test-release/* branch (current: $branch_name), proceeding due to --force"
+      warn "Not on a release/* branch (current: $branch_name), proceeding due to --force"
     else
-      die "Not on a release/* or test-release/* branch (current: $branch_name). Use --force to override." 1
+      die "Not on a release/* branch (current: $branch_name). Use --force to override." 1
     fi
   else
     log "Using release branch: $branch_name"
@@ -206,12 +206,6 @@ parse_xata_tag() {
   fi
 
   echo "$base $counter"
-}
-
-# Check if a tag exists
-tag_exists() {
-  local tag="$1"
-  git rev-parse "refs/tags/$tag" &>/dev/null
 }
 
 # Validate commit for tagging
@@ -264,7 +258,7 @@ main() {
 
   # Resolve branch to name and commit
   local resolved target_branch target_commit
-  resolved=$(resolve_branch_or_commit "BRANCH" "COMMIT")
+  resolved=$(resolve_branch_or_commit "$BRANCH" "$COMMIT")
   read -r target_branch target_commit <<< "$resolved"
 
   # Check if on/using release branch (unless --force)

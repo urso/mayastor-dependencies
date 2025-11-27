@@ -164,12 +164,12 @@ merge_upstream() {
   fi
 
   # Attempt the merge with conventional commit message
-  local merge_flags="--no-ff"
+  local merge_flags=("--no-ff")
   if [ "$no_verify" = "true" ]; then
-    merge_flags="$merge_flags --no-verify"
+    merge_flags+=("--no-verify")
   fi
 
-  if git merge $merge_flags -m "chore: sync upstream changes" "$merge_target" 2>&1; then
+  if git merge "${merge_flags[@]}" -m "chore: sync upstream changes" "$merge_target" 2>&1; then
     success "Successfully merged $merge_target"
 
     # Show summary

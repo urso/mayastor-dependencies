@@ -16,6 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Script options (must be before sourcing)
 DRY_RUN=false
 FORCE=false
+NO_VERIFY=false
 RELEASE_BRANCH=""
 BASE_BRANCH=""
 UPSTREAM_BRANCH=""
@@ -47,6 +48,7 @@ ARGUMENTS:
 OPTIONS:
   --dry-run                      Preview changes without applying
   --force                        Skip safety checks (clean working directory, branch exists)
+  --no-verify                    Skip git hooks during merge
   --base-branch <name>           Base branch to search for merges (default: current branch)
   --upstream-branch <name>       Upstream branch for merge-base (default: develop)
   --target-branch <name>         Local branch name to create (default: same as upstream-release-branch)
@@ -117,6 +119,10 @@ parse_args() {
         ;;
       --force)
         FORCE=true
+        shift
+        ;;
+      --no-verify)
+        NO_VERIFY=true
         shift
         ;;
       --base-branch)
@@ -377,8 +383,8 @@ sync_with_upstream() {
 
   echo ""
 
-  # Perform merge (using FORCE for no_verify)
-  if ! merge_upstream "$merge_target" "$DRY_RUN" "$FORCE"; then
+  # Perform merge
+  if ! merge_upstream "$merge_target" "$DRY_RUN" "$NO_VERIFY"; then
     error "Merge conflicts detected during sync"
     # Checkout back to original branch even on failure
     if [ "$target_branch" != "$current_branch" ]; then

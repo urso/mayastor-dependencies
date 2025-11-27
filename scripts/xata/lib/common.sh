@@ -188,23 +188,12 @@ apply_org_override() {
 }
 
 # Resolve branch or commit to a commit SHA
-# Args: branch_var_name, commit_var_name (optional)
+# Args: branch_value (optional), commit_value (optional)
 # Returns: "branch_name commit_sha" via stdout
-# Example: resolve_branch_or_commit "BRANCH" "COMMIT"
+# Example: resolve_branch_or_commit "$BRANCH" "$COMMIT"
 resolve_branch_or_commit() {
-  local branch_var="$1"
-  local commit_var="${2:-}"
-
-  local branch_value=""
-  local commit_value=""
-
-  # Safely get variable values using eval
-  if [ -n "$branch_var" ]; then
-    eval "branch_value=\${${branch_var}:-}"
-  fi
-  if [ -n "$commit_var" ]; then
-    eval "commit_value=\${${commit_var}:-}"
-  fi
+  local branch_value="${1:-}"
+  local commit_value="${2:-}"
 
   local target_ref target_name
 
@@ -361,4 +350,11 @@ check_remote_branch() {
   if ! git rev-parse --verify "$remote/$branch" &>/dev/null; then
     die "Remote branch does not exist: $remote/$branch" 3
   fi
+}
+
+# Check if a tag exists
+# Args: tag_name
+tag_exists() {
+  local tag="$1"
+  git rev-parse "refs/tags/$tag" &>/dev/null
 }
