@@ -17,6 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DRY_RUN=false
 FORCE=false
 NO_VERIFY=false
+STAY_ON_CONFLICT=false
 RELEASE_BRANCH=""
 BASE_BRANCH=""
 UPSTREAM_BRANCH=""
@@ -49,6 +50,7 @@ OPTIONS:
   --dry-run                      Preview changes without applying
   --force                        Skip safety checks (clean working directory, branch exists)
   --no-verify                    Skip git hooks during merge
+  --stay-on-conflict             Stay on target branch if merge conflicts occur (for manual resolution)
   --base-branch <name>           Base branch to search for merges (default: current branch)
   --upstream-branch <name>       Upstream branch for merge-base (default: develop)
   --target-branch <name>         Local branch name to create (default: same as upstream-release-branch)
@@ -123,6 +125,10 @@ parse_args() {
         ;;
       --no-verify)
         NO_VERIFY=true
+        shift
+        ;;
+      --stay-on-conflict)
+        STAY_ON_CONFLICT=true
         shift
         ;;
       --base-branch)
@@ -383,15 +389,45 @@ sync_with_upstream() {
 
   echo ""
 
-  # Perform merge
-  if ! merge_upstream "$merge_target" "$DRY_RUN" "$NO_VERIFY"; then
+  # Perform merge (don't abort on conflict if --stay-on-conflict is set)
+  local abort_on_conflict="true"
+  if [ "$STAY_ON_CONFLICT" = "true" ]; then
+    abort_on_conflict="false"
+  fi
+  if ! merge_upstream "$merge_target" "$DRY_RUN" "$NO_VERIFY" "$abort_on_conflict"; then
     error "Merge conflicts detected during sync"
-    # Checkout back to original branch even on failure
-    if [ "$target_branch" != "$current_branch" ]; then
-      log "Returning to $current_branch..."
-      git checkout "$current_branch" 2>/dev/null || warn "Failed to checkout back to $current_branch"
+    echo ""
+
+    if [ "$STAY_ON_CONFLICT" = true ]; then
+      warn "Staying on $target_branch so you can resolve conflicts."
+      echo ""
+      log "To resolve:"
+      log "  1. Fix conflicts in the listed files"
+      log "     - For submodule conflicts:"
+      log "         cd <submodule> && git fetch origin && git checkout origin/$target_branch && cd .."
+      log "  2. Stage resolved files:"
+      log "         git add <resolved-files>"
+      log "  3. Complete the merge:"
+      log "         git commit --no-verify"
+      echo ""
+      log "After resolving, verify and push:"
+      log "  git log --oneline --graph -5"
+      log "  git push origin $target_branch --no-follow-tags"
+      echo ""
+      log "To abort: git merge --abort && git checkout $current_branch"
+    else
+      # Return to original branch
+      if [ "$target_branch" != "$current_branch" ]; then
+        git merge --abort 2>/dev/null || true
+        log "Returning to $current_branch..."
+        git checkout "$current_branch" 2>/dev/null || warn "Failed to checkout back to $current_branch"
+      fi
+      echo ""
+      log "To resolve conflicts interactively:"
+      log "  1. Delete the branch: git branch -D $target_branch"
+      log "  2. Re-run with --stay-on-conflict flag"
     fi
-    die "Merge conflicts detected. Please resolve manually." 1
+    exit 1
   fi
 
   success "Successfully synced with upstream/$upstream_branch"

@@ -120,12 +120,13 @@ check_divergence() {
 }
 
 # Perform merge from upstream with conflict handling
-# Args: merge_target, dry_run (true/false), no_verify (true/false)
+# Args: merge_target, dry_run (true/false), no_verify (true/false), abort_on_conflict (true/false)
 # Returns: 0 on success, 1 on merge conflicts
 merge_upstream() {
   local merge_target="$1"
   local dry_run="${2:-false}"
   local no_verify="${3:-false}"
+  local abort_on_conflict="${4:-true}"
 
   log "Attempting to merge $merge_target..."
 
@@ -191,8 +192,10 @@ merge_upstream() {
         warn "Detected potential submodule conflicts"
       fi
 
-      # Abort the merge to leave repo in clean state
-      git merge --abort 2>/dev/null || true
+      # Abort the merge unless caller wants to keep it for manual resolution
+      if [ "$abort_on_conflict" = "true" ]; then
+        git merge --abort 2>/dev/null || true
+      fi
 
       return 1
     else
