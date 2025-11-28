@@ -119,6 +119,68 @@ check_divergence() {
   return 0
 }
 
+# Check if a path is a submodule
+# Args: path
+# Returns: 0 if submodule, 1 if not
+is_submodule() {
+  local path="$1"
+
+  # Check if directory with .git inside
+  if [ -d "$path" ] && { [ -f "$path/.git" ] || [ -d "$path/.git" ]; }; then
+    return 0
+  fi
+
+  # Check .gitmodules in case submodule dir doesn't exist yet
+  if [ -f ".gitmodules" ] && git config --file .gitmodules --get "submodule.$path.path" &>/dev/null; then
+    return 0
+  fi
+
+  return 1
+}
+
+# Auto-resolve submodule conflicts by keeping ours
+# (.gitattributes merge=ours doesn't work for submodules/gitlinks)
+# Returns: 0 if all conflicts resolved, 1 if file conflicts remain
+# Outputs remaining file conflicts to stdout (one per line)
+resolve_submodule_conflicts() {
+  local conflicted_files
+  conflicted_files=$(git diff --name-only --diff-filter=U 2>/dev/null)
+
+  if [ -z "$conflicted_files" ]; then
+    return 0
+  fi
+
+  local submodule_count=0
+  local file_conflicts=()
+
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+
+    if is_submodule "$file"; then
+      log "  Auto-resolving submodule: $file (keeping ours)"
+      git checkout --ours "$file" 2>/dev/null || true
+      git add "$file" 2>/dev/null || true
+      ((submodule_count++)) || true
+    else
+      file_conflicts+=("$file")
+    fi
+  done <<< "$conflicted_files"
+
+  if [ $submodule_count -gt 0 ]; then
+    log "Auto-resolved $submodule_count submodule conflict(s)"
+  fi
+
+  # Output remaining file conflicts
+  for file in "${file_conflicts[@]}"; do
+    echo "$file"
+  done
+
+  if [ ${#file_conflicts[@]} -gt 0 ]; then
+    return 1
+  fi
+  return 0
+}
+
 # Perform merge from upstream with conflict handling
 # Args: merge_target, dry_run (true/false), no_verify (true/false), abort_on_conflict (true/false)
 # Returns: 0 on success, 1 on merge conflicts
@@ -187,17 +249,46 @@ merge_upstream() {
       log "Conflicted files:"
       git diff --name-only --diff-filter=U 2>/dev/null || true
 
-      # Check for submodule conflicts
-      if git diff --name-only --diff-filter=U 2>/dev/null | grep -q "^[^/]*$"; then
-        warn "Detected potential submodule conflicts"
-      fi
+      # Try to auto-resolve submodule conflicts
+      local remaining_conflicts
+      remaining_conflicts=$(resolve_submodule_conflicts)
 
-      # Abort the merge unless caller wants to keep it for manual resolution
-      if [ "$abort_on_conflict" = "true" ]; then
-        git merge --abort 2>/dev/null || true
-      fi
+      if [ -z "$remaining_conflicts" ]; then
+        # All conflicts were submodules - complete the merge
+        log "All conflicts were submodule conflicts (auto-resolved)"
+        log "Completing merge..."
 
-      return 1
+        local commit_flags=()
+        if [ "$no_verify" = "true" ]; then
+          commit_flags+=("--no-verify")
+        fi
+
+        if git commit "${commit_flags[@]}" -m "chore: sync upstream changes"; then
+          success "Successfully merged $merge_target (submodule conflicts auto-resolved)"
+          log "Changes summary:"
+          git diff --stat HEAD~1 2>/dev/null || true
+          return 0
+        else
+          error "Failed to complete merge after resolving submodule conflicts"
+          if [ "$abort_on_conflict" = "true" ]; then
+            git merge --abort 2>/dev/null || true
+          fi
+          return 1
+        fi
+      else
+        # File conflicts remain
+        warn "Remaining file conflicts require manual resolution:"
+        echo "$remaining_conflicts" | while read -r file; do
+          [ -n "$file" ] && log "  $file"
+        done
+
+        # Abort the merge unless caller wants to keep it for manual resolution
+        if [ "$abort_on_conflict" = "true" ]; then
+          git merge --abort 2>/dev/null || true
+        fi
+
+        return 1
+      fi
     else
       # Some other error
       git merge --abort 2>/dev/null || true

@@ -334,6 +334,51 @@ create_branch() {
   fi
 }
 
+# Update .gitmodules to use target branch for all xataio submodules
+# Args: target_branch
+update_submodule_branches() {
+  local target_branch="$1"
+
+  # Check if .gitmodules exists
+  if [ ! -f ".gitmodules" ]; then
+    log "No .gitmodules file found, skipping submodule branch update"
+    return 0
+  fi
+
+  log "Updating submodule branches to: $target_branch"
+
+  # Get all submodule paths
+  local paths
+  paths=$(git config --file .gitmodules --get-regexp 'submodule\..*\.path' | awk '{print $2}')
+
+  if [ -z "$paths" ]; then
+    log "No submodules found"
+    return 0
+  fi
+
+  local updated=false
+  for path in $paths; do
+    local url
+    url=$(git config --file .gitmodules --get "submodule.$path.url" 2>/dev/null || true)
+
+    # Only update xataio submodules (relative paths or explicit xataio URLs)
+    if [[ "$url" =~ ^\.\./ ]] || [[ "$url" =~ ^\./ ]] || [[ "$url" =~ xataio ]]; then
+      if [ "$DRY_RUN" = true ]; then
+        log "[DRY RUN] Would set branch for $path to $target_branch"
+      else
+        git submodule set-branch --branch "$target_branch" "$path"
+        log "Set branch for $path to $target_branch"
+        updated=true
+      fi
+    fi
+  done
+
+  if [ "$updated" = true ]; then
+    git add .gitmodules
+    log "Staged .gitmodules changes"
+  fi
+}
+
 # Sync with upstream release branch
 # This brings in release-specific changes and updates .gitmodules
 # Uses lib/sync.sh functions directly to avoid bootstrap issues
@@ -405,10 +450,17 @@ sync_with_upstream() {
       log "  1. Fix conflicts in the listed files"
       log "     - For submodule conflicts:"
       log "         cd <submodule> && git fetch origin && git checkout origin/$target_branch && cd .."
+      log "         git add <submodule>"
       log "  2. Stage resolved files:"
       log "         git add <resolved-files>"
       log "  3. Complete the merge:"
       log "         git commit --no-verify"
+      echo ""
+      log "  4. Update .gitmodules to use $target_branch:"
+      log "         git submodule set-branch --branch $target_branch <submodule-path>"
+      log "         git submodule update --remote"
+      log "         git add .gitmodules <submodule-path>"
+      log "         git commit --no-verify -m 'chore: update submodule branches to $target_branch'"
       echo ""
       log "After resolving, verify and push:"
       log "  git log --oneline --graph -5"
@@ -431,6 +483,31 @@ sync_with_upstream() {
   fi
 
   success "Successfully synced with upstream/$upstream_branch"
+
+  # Update submodule branches if target differs from upstream release
+  if [ "$target_branch" != "$upstream_branch" ]; then
+    echo ""
+    update_submodule_branches "$target_branch"
+
+    # Update submodules to latest commit on their branches
+    log "Updating submodules to latest on $target_branch..."
+    if [ "$DRY_RUN" = true ]; then
+      log "[DRY RUN] Would run: git submodule update --remote"
+    else
+      git submodule update --remote || warn "Failed to update submodules (branch may not exist yet)"
+      git add -A  # Stage any submodule changes
+    fi
+
+    # Amend the merge commit to include submodule updates
+    if [ "$DRY_RUN" = false ] && [ -n "$(git diff --cached --name-only)" ]; then
+      log "Amending merge commit with submodule updates..."
+      local amend_flags=()
+      if [ "$NO_VERIFY" = "true" ]; then
+        amend_flags+=("--no-verify")
+      fi
+      git commit --amend --no-edit "${amend_flags[@]}" || warn "Failed to amend commit"
+    fi
+  fi
 
   # Checkout back to original branch
   if [ "$target_branch" != "$current_branch" ]; then
