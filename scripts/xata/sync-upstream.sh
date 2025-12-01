@@ -21,6 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Script options (must be before sourcing)
 DRY_RUN=false
 NO_VERIFY=false
+COMMIT_CONFLICTS=false
 UPSTREAM_BRANCH=""
 TARGET_BRANCH=""
 VERBOSE=false
@@ -45,6 +46,8 @@ be used in environments where developers have custom remote names.
 OPTIONS:
   --dry-run                      Preview changes without applying
   --no-verify                    Skip git hooks during merge (useful outside nix shell)
+  --commit-conflicts             Commit conflict markers instead of leaving working tree dirty
+                                 (useful for CI to create PRs with conflicts for manual resolution)
   --upstream-branch <branch>     Override auto-detected upstream branch
   --target-branch <branch>       Branch name to use for mapping (default: current branch)
                                  Note: Merge always happens into current branch
@@ -111,6 +114,10 @@ parse_args() {
         ;;
       --no-verify)
         NO_VERIFY=true
+        shift
+        ;;
+      --commit-conflicts)
+        COMMIT_CONFLICTS=true
         shift
         ;;
       --upstream-branch)
@@ -219,7 +226,7 @@ main() {
   echo ""
 
   # Attempt merge
-  if merge_upstream "$merge_target" "$DRY_RUN" "$NO_VERIFY"; then
+  if merge_upstream "$merge_target" "$DRY_RUN" "$NO_VERIFY" "$COMMIT_CONFLICTS"; then
     echo ""
     success "Sync completed successfully!"
     exit 0

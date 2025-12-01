@@ -182,13 +182,14 @@ resolve_submodule_conflicts() {
 }
 
 # Perform merge from upstream with conflict handling
-# Args: merge_target, dry_run (true/false), no_verify (true/false), abort_on_conflict (true/false)
+# Args: merge_target, dry_run (true/false), no_verify (true/false), commit_conflicts (true/false)
+#   commit_conflicts: if true, commit conflict markers for PR resolution; if false, leave working tree dirty
 # Returns: 0 on success, 1 on merge conflicts
 merge_upstream() {
   local merge_target="$1"
   local dry_run="${2:-false}"
   local no_verify="${3:-false}"
-  local abort_on_conflict="${4:-true}"
+  local commit_conflicts="${4:-false}"
 
   log "Attempting to merge $merge_target..."
 
@@ -227,12 +228,13 @@ merge_upstream() {
   fi
 
   # Attempt the merge with conventional commit message
-  local merge_flags=("--no-ff")
+  # Use zdiff3 conflict style to show common ancestor in conflict markers
+  local merge_flags=("-c" "merge.conflictStyle=zdiff3" "merge" "--no-ff")
   if [ "$no_verify" = "true" ]; then
     merge_flags+=("--no-verify")
   fi
 
-  if git merge "${merge_flags[@]}" -m "chore: sync upstream changes" "$merge_target" 2>&1; then
+  if git "${merge_flags[@]}" -m "chore: sync upstream changes" "$merge_target" 2>&1; then
     success "Successfully merged $merge_target"
 
     # Show summary
@@ -270,9 +272,7 @@ merge_upstream() {
           return 0
         else
           error "Failed to complete merge after resolving submodule conflicts"
-          if [ "$abort_on_conflict" = "true" ]; then
-            git merge --abort 2>/dev/null || true
-          fi
+          git merge --abort 2>/dev/null || true
           return 1
         fi
       else
@@ -282,9 +282,14 @@ merge_upstream() {
           [ -n "$file" ] && log "  $file"
         done
 
-        # Abort the merge unless caller wants to keep it for manual resolution
-        if [ "$abort_on_conflict" = "true" ]; then
-          git merge --abort 2>/dev/null || true
+        if [ "$commit_conflicts" = "true" ]; then
+          # Commit the conflict markers so they can be pushed and resolved in a PR
+          log "Committing conflict markers for PR resolution..."
+          git add -A
+          git commit -m "chore: sync upstream changes (conflicts)
+
+This commit contains unresolved merge conflicts that need manual resolution.
+Look for conflict markers (<<<<<<< HEAD, =======, >>>>>>> upstream) in the files listed above."
         fi
 
         return 1
