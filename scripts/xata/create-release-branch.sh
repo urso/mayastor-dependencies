@@ -87,6 +87,23 @@ PREREQUISITES:
   - Release base must exist in your base branch (sync with upstream first if needed)
   - Working directory must be clean (no uncommitted changes, or use --force)
 
+HOOKS:
+  The script looks for optional hook scripts in the repository:
+
+  pre-sync-release-branch.sh   - Runs after branch creation, before upstream sync
+                                  Use to add .gitattributes entries, regenerate files, etc.
+  post-create-release-branch.sh - Runs after successful sync
+                                  Use to update generated files, run additional setup, etc.
+
+  Hook scripts are searched for in:
+    1. ./scripts/xata/<hook-name>
+    2. Repo root ./<hook-name>
+
+  Hooks receive these environment variables:
+    TARGET_BRANCH    - The target branch name (e.g., release/2.10 or test-release/2.10)
+    RELEASE_BRANCH   - The upstream release branch (e.g., release/2.10)
+    NO_VERIFY        - "true" if --no-verify was passed
+
 NOTE:
   This script does NOT push the branch automatically. Review the branch first,
   then push manually or via a GitHub workflow.
@@ -334,6 +351,54 @@ create_branch() {
   fi
 }
 
+# Run an optional hook script if it exists
+# Args: hook_name, target_branch, release_branch
+# Returns: 0 if hook ran or doesn't exist, 1 if hook failed
+run_hook() {
+  local hook_name="$1"
+  local target_branch="$2"
+  local release_branch="$3"
+
+  # Search for hook in known locations
+  local hook_path=""
+  local search_paths=(
+    "./scripts/xata/$hook_name"
+    "./$hook_name"
+  )
+
+  for path in "${search_paths[@]}"; do
+    if [ -x "$path" ]; then
+      hook_path="$path"
+      break
+    fi
+  done
+
+  if [ -z "$hook_path" ]; then
+    # Hook doesn't exist, that's fine
+    return 0
+  fi
+
+  log "Running hook: $hook_path"
+
+  if [ "$DRY_RUN" = true ]; then
+    log "[DRY RUN] Would run: TARGET_BRANCH=$target_branch RELEASE_BRANCH=$release_branch $hook_path"
+    return 0
+  fi
+
+  # Export environment variables for the hook
+  export TARGET_BRANCH="$target_branch"
+  export RELEASE_BRANCH="$release_branch"
+  export NO_VERIFY="$NO_VERIFY"
+
+  if "$hook_path"; then
+    success "Hook completed: $hook_name"
+    return 0
+  else
+    error "Hook failed: $hook_name"
+    return 1
+  fi
+}
+
 # Update .gitmodules to use target branch for all xataio submodules
 # Args: target_branch
 update_submodule_branches() {
@@ -401,6 +466,14 @@ sync_with_upstream() {
   if [ "$target_branch" != "$current_branch" ]; then
     log "Checking out $target_branch for sync..."
     git checkout "$target_branch" || die "Failed to checkout $target_branch" 1
+  fi
+
+  # Run pre-sync hook (can add .gitattributes, regenerate files, etc.)
+  if ! run_hook "pre-sync-release-branch.sh" "$target_branch" "$upstream_branch"; then
+    if [ "$target_branch" != "$current_branch" ]; then
+      git checkout "$current_branch" 2>/dev/null || true
+    fi
+    die "Pre-sync hook failed" 1
   fi
 
   # Use sync library functions directly (already loaded from correct branch)
@@ -507,6 +580,12 @@ sync_with_upstream() {
       fi
       git commit --amend --no-edit "${amend_flags[@]}" || warn "Failed to amend commit"
     fi
+  fi
+
+  # Run post-merge hook (can update generated files, run additional setup, etc.)
+  if ! run_hook "post-create-release-branch.sh" "$target_branch" "$upstream_branch"; then
+    warn "Post-merge hook failed, but branch was created successfully"
+    # Don't fail the whole operation, just warn
   fi
 
   # Checkout back to original branch
