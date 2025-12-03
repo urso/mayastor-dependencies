@@ -188,10 +188,10 @@ main() {
     die "Not inside a git repository" 1
   fi
 
-  # Apply org override and detect remotes
-  apply_org_override
-  detect_xata_remote
-  detect_upstream_remote
+  # Get remotes (lazy initialization)
+  local xata_remote upstream_remote
+  get_xata_remote xata_remote
+  get_upstream_remote upstream_remote
 
   echo ""
 
@@ -210,8 +210,8 @@ main() {
   log "Commit is a merge commit"
 
   # Fetch upstream tags first (needed for tag detection)
-  log "Fetching upstream tags from $DETECTED_UPSTREAM_REMOTE..."
-  git fetch "$DETECTED_UPSTREAM_REMOTE" 'refs/tags/*:refs/tags/*' || die "Failed to fetch upstream tags" 1
+  log "Fetching upstream tags from $upstream_remote..."
+  git fetch "$upstream_remote" 'refs/tags/*:refs/tags/*' || die "Failed to fetch upstream tags" 1
 
   # Find the upstream commit with tags (handles both direct push and PR merge)
   local upstream_parent
@@ -267,11 +267,11 @@ main() {
 
   # Push created tags
   if [ "$DRY_RUN" = true ]; then
-    log "[DRY RUN] Would push tags to $DETECTED_XATA_REMOTE: ${created_tags[*]}"
+    log "[DRY RUN] Would push tags to $xata_remote: ${created_tags[*]}"
   else
-    log "Pushing tags to $DETECTED_XATA_REMOTE..."
+    log "Pushing tags to $xata_remote..."
     for tag in "${created_tags[@]}"; do
-      git push "$DETECTED_XATA_REMOTE" "refs/tags/$tag" --no-follow-tags || die "Failed to push tag $tag" 1
+      git push "$xata_remote" "refs/tags/$tag" --no-follow-tags || die "Failed to push tag $tag" 1
       success "Pushed tag: $tag"
     done
   fi

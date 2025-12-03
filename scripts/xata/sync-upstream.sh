@@ -175,12 +175,10 @@ main() {
     die "Not inside a git repository" 4
   fi
 
-  # Apply org override and detect remotes
-  apply_org_override
-  detect_xata_remote
-
-  # Detect or configure upstream remote
-  detect_upstream_remote
+  # Get remotes (lazy initialization)
+  local xata_remote upstream_remote
+  get_xata_remote xata_remote
+  get_upstream_remote upstream_remote
 
   echo ""
 
@@ -196,19 +194,19 @@ main() {
   # Map to upstream branch
   local upstream_branch
   upstream_branch=$(map_branch "$TARGET_BRANCH" "$UPSTREAM_BRANCH")
-  log "Branch mapping: $TARGET_BRANCH → $DETECTED_UPSTREAM_REMOTE/$upstream_branch"
+  log "Branch mapping: $TARGET_BRANCH → $upstream_remote/$upstream_branch"
 
   echo ""
 
   # Fetch from upstream
-  fetch_upstream "$DETECTED_UPSTREAM_REMOTE" "$upstream_branch"
+  fetch_upstream "$upstream_remote" "$upstream_branch"
 
   # Check if upstream branch exists
-  check_remote_branch "$DETECTED_UPSTREAM_REMOTE" "$upstream_branch"
+  check_remote_branch "$upstream_remote" "$upstream_branch"
 
   # Determine merge target (tag or branch HEAD)
   local merge_target
-  merge_target=$(determine_merge_target "$DETECTED_UPSTREAM_REMOTE" "$upstream_branch")
+  merge_target=$(determine_merge_target "$upstream_remote" "$upstream_branch")
   log "Merge target: $merge_target"
 
   echo ""

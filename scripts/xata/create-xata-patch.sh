@@ -250,9 +250,9 @@ main() {
     die "Not inside a git repository" 1
   fi
 
-  # Apply org override and detect remotes
-  apply_org_override
-  detect_xata_remote
+  # Get xata remote (lazy initialization)
+  local xata_remote
+  get_xata_remote xata_remote
 
   echo ""
 
@@ -325,13 +325,13 @@ main() {
   # Create the tag
   if [ "$DRY_RUN" = true ]; then
     log "[DRY RUN] Would create tag: $new_tag -> $target_commit_sha"
-    log "[DRY RUN] Would push tag to $DETECTED_XATA_REMOTE"
+    log "[DRY RUN] Would push tag to $xata_remote"
   else
     log "Creating tag: $new_tag -> $target_commit_sha"
     git tag "$new_tag" "$target_commit_sha" || die "Failed to create tag $new_tag" 1
 
-    log "Pushing tag to $DETECTED_XATA_REMOTE..."
-    git push "$DETECTED_XATA_REMOTE" "refs/tags/$new_tag" --no-follow-tags || die "Failed to push tag $new_tag" 1
+    log "Pushing tag to $xata_remote..."
+    git push "$xata_remote" "refs/tags/$new_tag" --no-follow-tags || die "Failed to push tag $new_tag" 1
   fi
 
   echo ""

@@ -458,6 +458,10 @@ sync_with_upstream() {
     return 0
   fi
 
+  # Get upstream remote (already cached from main)
+  local upstream_remote
+  get_upstream_remote upstream_remote
+
   # Save current branch so we can return to it
   local current_branch
   current_branch=$(git rev-parse --abbrev-ref HEAD)
@@ -477,11 +481,11 @@ sync_with_upstream() {
   fi
 
   # Use sync library functions directly (already loaded from correct branch)
-  fetch_upstream "$DETECTED_UPSTREAM_REMOTE" "$upstream_branch"
-  check_remote_branch "$DETECTED_UPSTREAM_REMOTE" "$upstream_branch"
+  fetch_upstream "$upstream_remote" "$upstream_branch"
+  check_remote_branch "$upstream_remote" "$upstream_branch"
 
   local merge_target
-  merge_target=$(determine_merge_target "$DETECTED_UPSTREAM_REMOTE" "$upstream_branch")
+  merge_target=$(determine_merge_target "$upstream_remote" "$upstream_branch")
   log "Merge target: $merge_target"
 
   echo ""
@@ -622,46 +626,44 @@ main() {
   # Check for clean working directory
   check_clean_working_directory
 
-  # Apply org override and detect remotes
-  apply_org_override
-  detect_xata_remote
-
-  # Detect or configure upstream remote
-  detect_upstream_remote
+  # Get remotes (lazy initialization)
+  local xata_remote upstream_remote
+  get_xata_remote xata_remote
+  get_upstream_remote upstream_remote
 
   echo ""
 
   log "Configuration:"
   log "  Base branch: $base_branch (will search commit history for merges)"
-  log "  Upstream develop: $DETECTED_UPSTREAM_REMOTE/$upstream_develop"
-  log "  Upstream release: $DETECTED_UPSTREAM_REMOTE/$RELEASE_BRANCH"
+  log "  Upstream develop: $upstream_remote/$upstream_develop"
+  log "  Upstream release: $upstream_remote/$RELEASE_BRANCH"
   log "  Target branch: $target_branch"
   echo ""
 
   # Check if branch already exists
-  check_branch_exists "$target_branch" "$DETECTED_XATA_REMOTE"
+  check_branch_exists "$target_branch" "$xata_remote"
 
   # Fetch upstream to ensure we have latest branches
-  log "Fetching from $DETECTED_UPSTREAM_REMOTE..."
+  log "Fetching from $upstream_remote..."
   if [ "$DRY_RUN" = true ]; then
-    log "[DRY RUN] Would run: git fetch $DETECTED_UPSTREAM_REMOTE"
+    log "[DRY RUN] Would run: git fetch $upstream_remote"
   else
-    git fetch "$DETECTED_UPSTREAM_REMOTE" || die "Failed to fetch from $DETECTED_UPSTREAM_REMOTE" 1
+    git fetch "$upstream_remote" || die "Failed to fetch from $upstream_remote" 1
   fi
 
   # Fetch from our remote to ensure we have latest base branch
-  log "Fetching from $DETECTED_XATA_REMOTE..."
+  log "Fetching from $xata_remote..."
   if [ "$DRY_RUN" = true ]; then
-    log "[DRY RUN] Would run: git fetch $DETECTED_XATA_REMOTE"
+    log "[DRY RUN] Would run: git fetch $xata_remote"
   else
-    git fetch "$DETECTED_XATA_REMOTE" || die "Failed to fetch from $DETECTED_XATA_REMOTE" 1
+    git fetch "$xata_remote" || die "Failed to fetch from $xata_remote" 1
   fi
 
   echo ""
 
   # Find the release base
   local release_base
-  release_base=$(find_release_base "$RELEASE_BRANCH" "$DETECTED_UPSTREAM_REMOTE" "$upstream_develop")
+  release_base=$(find_release_base "$RELEASE_BRANCH" "$upstream_remote" "$upstream_develop")
 
   # Find the merge commit in our base branch that contains the release base
   local merge_commit
@@ -686,8 +688,8 @@ main() {
   log "Next steps:"
   log "  1. Switch to branch: git checkout $target_branch"
   log "  2. Review the branch: git log --oneline --graph -20"
-  log "  3. Verify changes: git diff $DETECTED_UPSTREAM_REMOTE/$RELEASE_BRANCH..$target_branch"
-  log "  4. Push when ready: git push $DETECTED_XATA_REMOTE $target_branch --no-follow-tags"
+  log "  3. Verify changes: git diff $upstream_remote/$RELEASE_BRANCH..$target_branch"
+  log "  4. Push when ready: git push $xata_remote $target_branch --no-follow-tags"
   echo ""
   warn "IMPORTANT: Always use --no-follow-tags when pushing release branches!"
   warn "This prevents accidentally pushing upstream tags to your fork."
