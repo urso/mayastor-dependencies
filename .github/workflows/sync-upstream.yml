@@ -68,7 +68,7 @@ jobs:
           GIT_COMMITTER_NAME: 'Xata Bot'
           GIT_COMMITTER_EMAIL: 'xata-bot@users.noreply.github.com'
         run: |
-          CMD="./scripts/xata/sync-upstream.sh --target-branch ${{ github.ref_name }}"
+          CMD="./scripts/xata/sync-upstream.sh --target-branch ${{ github.ref_name }} --commit-conflicts"
           if [ -n "${{ inputs.upstream_branch }}" ]; then
             CMD="$CMD --upstream-branch ${{ inputs.upstream_branch }}"
           fi
@@ -109,14 +109,59 @@ jobs:
             esac
           fi
 
-          # Set PR title
+          # Set PR title and body based on merge result
           PR_DATE=$(date +%Y-%m-%d)
           if [ "${{ steps.sync.outputs.exit_code }}" = "0" ]; then
             PR_TITLE="chore: sync upstream changes (${{ github.ref_name }}) - ${PR_DATE}"
-            STATUS="✅ Clean merge"
+            PR_BODY="## Upstream Sync
+
+          **Source:** \`openebs/mayastor-dependencies\` (\`${UPSTREAM_BRANCH}\`)
+          **Target:** \`${{ github.ref_name }}\`
+          **Status:** ✅ Clean merge
+
+          *Automated sync from upstream repository.*"
           else
             PR_TITLE="chore: sync upstream changes (${{ github.ref_name }}) - ${PR_DATE} [CONFLICTS]"
-            STATUS="⚠️ Merge conflicts"
+            PR_BODY="## Upstream Sync
+
+          **Source:** \`openebs/mayastor-dependencies\` (\`${UPSTREAM_BRANCH}\`)
+          **Target:** \`${{ github.ref_name }}\`
+          **Status:** ⚠️ Merge conflicts requiring manual resolution
+
+          ### How to resolve
+
+          1. Check out this branch locally:
+             \`\`\`bash
+             git fetch origin
+             git checkout ${{ steps.sync-branch.outputs.name }}
+             \`\`\`
+
+          2. Search for conflict markers in the affected files:
+             \`\`\`bash
+             git diff --name-only --diff-filter=U
+             # Or search for markers:
+             grep -r '<<<<<<< HEAD' .
+             \`\`\`
+
+          3. Edit each conflicted file to resolve the conflicts. The markers look like:
+             \`\`\`
+             <<<<<<< HEAD
+             your changes
+             ||||||| (common ancestor)
+             original code
+             =======
+             upstream changes
+             >>>>>>> upstream/develop
+             \`\`\`
+
+          4. After resolving all conflicts, stage and commit:
+             \`\`\`bash
+             git add -A
+             git commit -m \"chore: resolve upstream sync conflicts\"
+             git push
+             \`\`\`
+
+          *Automated sync from upstream repository.*"
           fi
 
           # Create PR and extract PR number from URL
@@ -125,13 +170,7 @@ jobs:
             --base "${{ github.ref_name }}" \
             --head "${{ steps.sync-branch.outputs.name }}" \
             --title "${PR_TITLE}" \
-            --body "## Upstream Sync
-
-          **Source:** \`openebs/mayastor-dependencies\` (\`${UPSTREAM_BRANCH}\`)
-          **Target:** \`${{ github.ref_name }}\`
-          **Status:** ${STATUS}
-
-          *Automated sync from upstream repository.*")
+            --body "${PR_BODY}")
 
           # Extract PR number from URL (e.g., https://github.com/owner/repo/pull/123)
           PR_NUMBER=$(echo "$PR_URL" | sed 's#.*/pull/##')
