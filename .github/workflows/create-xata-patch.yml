@@ -3,6 +3,11 @@ name: Create Xata Patch Release
 on:
   workflow_dispatch:
     inputs:
+      branch:
+        description: 'Release branch (e.g., release/2.10) - leave empty for current branch'
+        required: false
+        type: string
+        default: ''
       base_version:
         description: 'Base version (e.g., v2.9.4) - leave empty to auto-detect'
         required: false
@@ -27,9 +32,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Fetch target branch
+        if: inputs.branch != ''
+        run: git fetch origin ${{ inputs.branch }}
+
       - name: Create xata patch tag
+        env:
+          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
           CMD="./scripts/xata/create-xata-patch.sh"
+
+          if [ -n "${{ inputs.branch }}" ]; then
+            CMD="$CMD --branch origin/${{ inputs.branch }}"
+          fi
 
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             CMD="$CMD --dry-run"

@@ -46,6 +46,11 @@ jobs:
           echo "branch=${TARGET_BRANCH}" >> $GITHUB_OUTPUT
 
       - name: Create release branch
+        env:
+          GIT_AUTHOR_NAME: 'Xata Bot'
+          GIT_AUTHOR_EMAIL: 'xata-bot@users.noreply.github.com'
+          GIT_COMMITTER_NAME: 'Xata Bot'
+          GIT_COMMITTER_EMAIL: 'xata-bot@users.noreply.github.com'
         run: |
           CMD="./scripts/xata/create-release-branch.sh ${{ inputs.release_branch }}"
 
@@ -69,7 +74,15 @@ jobs:
           echo "Pushing branch: ${{ steps.target.outputs.branch }}"
           git push -u origin "${{ steps.target.outputs.branch }}" --no-follow-tags
 
-      - name: Summary
-        if: always()
+      - name: Sync release tags
+        env:
+          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
-          echo "✅ Release branch created and pushed: ${{ steps.target.outputs.branch }}"
+          set +e
+          ./scripts/xata/sync-release-tags.sh --branch "${{ steps.target.outputs.branch }}"
+          EXIT_CODE=$?
+          set -e
+
+          if [ ${EXIT_CODE} -ne 0 ] && [ ${EXIT_CODE} -ne 2 ]; then
+            exit ${EXIT_CODE}
+          fi

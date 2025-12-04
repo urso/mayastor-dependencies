@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - 'release/*'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to sync tags from (default: current branch)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -18,24 +25,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Fetch target branch
+        if: inputs.branch != ''
+        run: git fetch origin ${{ inputs.branch }}
+
       - name: Sync release tags
-        id: sync-tags
+        env:
+          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
+          CMD="./scripts/xata/sync-release-tags.sh"
+          if [ -n "${{ inputs.branch }}" ]; then
+            CMD="$CMD --branch origin/${{ inputs.branch }}"
+          fi
+
           set +e
-          ./scripts/xata/sync-release-tags.sh
+          $CMD
           EXIT_CODE=$?
           set -e
-          echo "exit_code=${EXIT_CODE}" >> $GITHUB_OUTPUT
 
           if [ ${EXIT_CODE} -ne 0 ] && [ ${EXIT_CODE} -ne 2 ]; then
             exit ${EXIT_CODE}
           fi
-
-      - name: Summary
-        if: always()
-        run: |
-          case "${{ steps.sync-tags.outputs.exit_code }}" in
-            0) echo "✅ Release tags created and pushed successfully" ;;
-            2) echo "✓ Nothing to do - no new upstream tags to sync" ;;
-            *) echo "❌ Failed with exit code: ${{ steps.sync-tags.outputs.exit_code }}" ;;
-          esac
