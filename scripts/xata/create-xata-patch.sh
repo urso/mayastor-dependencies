@@ -156,7 +156,7 @@ parse_args() {
 check_release_branch() {
   local branch_name="$1"
 
-  if ! echo "$branch_name" | grep -qE '^release/'; then
+  if ! echo "$branch_name" | grep -qE '(^|/)release/'; then
     if [ "$FORCE" = true ]; then
       warn "Not on a release/* branch (current: $branch_name), proceeding due to --force"
     else

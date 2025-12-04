@@ -634,7 +634,7 @@ main() {
   echo ""
 
   log "Configuration:"
-  log "  Base branch: $base_branch (will search commit history for merges)"
+  log "  Base branch: $xata_remote/$base_branch (will search commit history for merges)"
   log "  Upstream develop: $upstream_remote/$upstream_develop"
   log "  Upstream release: $upstream_remote/$RELEASE_BRANCH"
   log "  Target branch: $target_branch"
@@ -666,8 +666,9 @@ main() {
   release_base=$(find_release_base "$RELEASE_BRANCH" "$upstream_remote" "$upstream_develop")
 
   # Find the merge commit in our base branch that contains the release base
+  # Use remote ref since we may not have local branch checked out
   local merge_commit
-  merge_commit=$(find_merge_with_base "$release_base" "$base_branch")
+  merge_commit=$(find_merge_with_base "$release_base" "$xata_remote/$base_branch")
 
   echo ""
   log "Creating target branch $target_branch from merge commit $merge_commit"
