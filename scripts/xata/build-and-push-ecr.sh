@@ -83,6 +83,9 @@ determine_version_tag() {
     fi
   fi
 
+  # Sanitize BASE_TAG for Docker: replace '+' with '-' (Docker tags can't contain '+')
+  BASE_TAG="${BASE_TAG//+/-}"
+
   # Add architecture suffix to tag (unless already overridden by --tag)
   if [ -z "${VERSION_TAG:-}" ]; then
     VERSION_TAG="${BASE_TAG}-${ARCH}"
