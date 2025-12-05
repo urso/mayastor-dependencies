@@ -28,6 +28,7 @@ XATA_ORG_OVERRIDE=""
 
 source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/sync.sh"
+source "$SCRIPT_DIR/update-submodules.sh"
 
 # Display help
 show_help() {
@@ -561,29 +562,30 @@ sync_with_upstream() {
 
   success "Successfully synced with upstream/$upstream_branch"
 
-  # Update submodule branches if target differs from upstream release
+  # Update submodule branch config only if target differs from upstream release
   if [ "$target_branch" != "$upstream_branch" ]; then
     echo ""
     update_submodule_branches "$target_branch"
+  fi
 
-    # Update submodules to latest commit on their branches
-    log "Updating submodules to latest on $target_branch..."
-    if [ "$DRY_RUN" = true ]; then
-      log "[DRY RUN] Would run: git submodule update --remote"
-    else
-      git submodule update --remote || warn "Failed to update submodules (branch may not exist yet)"
-      git add -A  # Stage any submodule changes
-    fi
+  # Always update xataio submodules to latest commit on target branch
+  # (upstream submodules point to openebs repos, ours point to xataio repos)
+  echo ""
+  log "Updating xataio submodules to latest on $target_branch..."
+  if [ "$DRY_RUN" = true ]; then
+    log "[DRY RUN] Would run: update_xata_submodules"
+  else
+    update_xata_submodules || warn "Failed to update submodules (branch may not exist yet)"
+  fi
 
-    # Amend the merge commit to include submodule updates
-    if [ "$DRY_RUN" = false ] && [ -n "$(git diff --cached --name-only)" ]; then
-      log "Amending merge commit with submodule updates..."
-      local amend_flags=()
-      if [ "$NO_VERIFY" = "true" ]; then
-        amend_flags+=("--no-verify")
-      fi
-      git commit --amend --no-edit "${amend_flags[@]}" || warn "Failed to amend commit"
+  # Amend the merge commit to include submodule updates
+  if [ "$DRY_RUN" = false ] && [ -n "$(git diff --cached --name-only)" ]; then
+    log "Amending merge commit with submodule updates..."
+    local amend_flags=()
+    if [ "$NO_VERIFY" = "true" ]; then
+      amend_flags+=("--no-verify")
     fi
+    git commit --amend --no-edit "${amend_flags[@]}" || warn "Failed to amend commit"
   fi
 
   # Run post-merge hook (can update generated files, run additional setup, etc.)
