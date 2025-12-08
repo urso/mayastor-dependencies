@@ -30,6 +30,9 @@ determine_base_tag() {
       BASE_TAG=$(git describe --exact-match 2>/dev/null || git describe --tags --always)
     fi
   fi
+
+  # Sanitize BASE_TAG for Docker: replace '+' with '-' (Docker tags can't contain '+')
+  BASE_TAG="${BASE_TAG//+/-}"
 }
 
 # Validate required environment variables
