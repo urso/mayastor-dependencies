@@ -270,41 +270,62 @@ find_release_base() {
   echo "$base"
 }
 
-# Find merge commit in our base branch that contains the release base
-# Returns the merge commit SHA, or exits with error if not found
+# Check if a commit's upstream content is at or before the release base.
+# For merge commits, checks if parent2 (upstream side) is at or before base.
+# For non-merge commits, checks if parent1 is at or before base.
+# Returns 0 if commit is valid, 1 otherwise
+is_commit_at_or_before_base() {
+  local commit="$1"
+  local base_commit="$2"
+
+  # Check if this is a merge commit
+  local parent2
+  parent2=$(git rev-parse "$commit^2" 2>/dev/null || echo "")
+
+  if [ -n "$parent2" ]; then
+    # Merge commit: check if parent2 (upstream side) is at or before the release base
+    [ "$parent2" = "$base_commit" ] && return 0
+    git merge-base --is-ancestor "$parent2" "$base_commit" 2>/dev/null && return 0
+  else
+    # Non-merge commit: check if parent1 is at or before the release base
+    local parent1
+    parent1=$(git rev-parse "$commit^1" 2>/dev/null || echo "")
+    [ "$parent1" = "$base_commit" ] && return 0
+    [ -n "$parent1" ] && git merge-base --is-ancestor "$parent1" "$base_commit" 2>/dev/null && return 0
+  fi
+
+  return 1
+}
+
+# Find the best commit in our base branch to use as release branch base.
+# This finds the latest commit where upstream content is at or before the release base,
+# meaning it doesn't contain commits that went into upstream/develop after the release branched.
+#
+# Args:
+#   base_commit: The merge-base between upstream/release and upstream/develop
+#   base_branch: Our branch to search in (e.g., xataio/develop)
+#
+# Returns the commit SHA, or exits with error if not found
 find_merge_with_base() {
   local base_commit="$1"
   local base_branch="$2"
 
-  log "Searching for merge commit in $base_branch that contains base $base_commit..."
+  log "Searching for commit in $base_branch at or before release base $base_commit..."
 
-  # Get all merge commits in base branch (most recent first)
-  # This searches the commit history reachable from base_branch
-  local merge_commits
-  merge_commits=$(git rev-list --merges "$base_branch" 2>/dev/null || true)
+  local result
+  result=$(git rev-list "$base_branch" 2>/dev/null | while IFS= read -r commit; do
+    if is_commit_at_or_before_base "$commit" "$base_commit"; then
+      echo "$commit"
+      break
+    fi
+  done)
 
-  if [ -z "$merge_commits" ]; then
-    die "No merge commits found in $base_branch" 1
+  if [ -z "$result" ]; then
+    die "Release base $base_commit not found in $base_branch. Please sync $base_branch with upstream first." 1
   fi
 
-  # Iterate through merge commits
-  while IFS= read -r merge; do
-    [ -z "$merge" ] && continue
-
-    # Get second parent (upstream side of merge)
-    local parent2
-    parent2=$(git rev-parse "$merge^2" 2>/dev/null || continue)
-
-    # Check if parent2 contains or equals the base
-    if git merge-base --is-ancestor "$base_commit" "$parent2" 2>/dev/null; then
-      log "Found merge commit: $merge (upstream parent: $parent2)"
-      echo "$merge"
-      return 0
-    fi
-  done <<< "$merge_commits"
-
-  # No merge found containing the base
-  die "Release base not found in $base_branch. Please sync $base_branch with upstream first." 1
+  log "Found commit at or before release base: $result"
+  echo "$result"
 }
 
 # Check if branch already exists locally or remotely
@@ -667,7 +688,7 @@ main() {
   local release_base
   release_base=$(find_release_base "$RELEASE_BRANCH" "$upstream_remote" "$upstream_develop")
 
-  # Find the merge commit in our base branch that contains the release base
+  # Find the best commit in our base branch to use as release branch base
   # Use remote ref since we may not have local branch checked out
   local merge_commit
   merge_commit=$(find_merge_with_base "$release_base" "$xata_remote/$base_branch")
