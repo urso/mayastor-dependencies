@@ -667,19 +667,21 @@ main() {
   check_branch_exists "$target_branch" "$xata_remote"
 
   # Fetch upstream to ensure we have latest branches
+  # Use --no-recurse-submodules because upstream submodules point to openebs repos,
+  # but our relative URLs resolve to xataio repos which may not have those commits yet
   log "Fetching from $upstream_remote..."
   if [ "$DRY_RUN" = true ]; then
-    log "[DRY RUN] Would run: git fetch $upstream_remote"
+    log "[DRY RUN] Would run: git fetch --no-recurse-submodules $upstream_remote"
   else
-    git fetch "$upstream_remote" || die "Failed to fetch from $upstream_remote" 1
+    git fetch --no-recurse-submodules "$upstream_remote" || die "Failed to fetch from $upstream_remote" 1
   fi
 
   # Fetch from our remote to ensure we have latest base branch
   log "Fetching from $xata_remote..."
   if [ "$DRY_RUN" = true ]; then
-    log "[DRY RUN] Would run: git fetch $xata_remote"
+    log "[DRY RUN] Would run: git fetch --no-recurse-submodules $xata_remote"
   else
-    git fetch "$xata_remote" || die "Failed to fetch from $xata_remote" 1
+    git fetch --no-recurse-submodules "$xata_remote" || die "Failed to fetch from $xata_remote" 1
   fi
 
   echo ""
